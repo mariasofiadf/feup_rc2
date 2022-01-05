@@ -12,12 +12,12 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
-#include <string.h>
-#include <stdio.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <stdio.h>  
+#include <string.h>  
 #include<arpa/inet.h>
 
 #define SERVER_PORT 21
@@ -29,6 +29,7 @@ char password[255];
 char host[255];
 char url_path[255];
 char ip[255];
+char filename[255];
 
 int get_resp(int controlfd, int code, char* resp){
     int num, count = 0;
@@ -69,7 +70,7 @@ int send_cmd(int controlfd, char* cmd){
 }
 
 int anonymous_login(int controlfd){
-    char cmd[254];
+    char cmd[300];
     sprintf(cmd,"user %s\n", user);
     send_cmd(controlfd,cmd);
 
@@ -96,7 +97,7 @@ int get_port(char*string){
 
 int retr(int controlfd, char* filepath){
  
-    char cmd[100];
+    char cmd[300];
     sprintf(cmd,"retr %s\n", url_path);
 
     //sprintf(cmd, "retr %s", "pub/kodi/timestamp.txt");
@@ -159,8 +160,23 @@ int get_host(){
     return 0;
 }
 
+void revstr(char *str1)  
+{  
+    // declare variable  
+    int i, len, temp;  
+    len = strlen(str1); // use strlen() to get the length of str string  
+      
+    // use for loop to iterate the string   
+    for (i = 0; i < len/2; i++)  
+    {  
+        // temp variable use to temporary hold the string  
+        temp = str1[i];  
+        str1[i] = str1[len - i - 1];  
+        str1[len - i - 1] = temp;  
+    }  
+}  
+
 int get_args(char *url){
-    char trash[100];
     char *token = strtok(url, "[");
 
     token = strtok(NULL, ":");
@@ -172,6 +188,13 @@ int get_args(char *url){
     token = strtok(NULL, "\0");
     strcpy(url_path,token);
 
+    char rev[100];
+    strcpy(rev, url_path);
+    revstr(rev);
+    token = strtok(rev, "/");
+    strcpy(filename,token);
+    revstr(filename);
+    printf("filename: %s\n ", filename);
     get_host();
     printf("ip: %s\n", ip);
     return 0;
@@ -181,6 +204,7 @@ int main(int argc, char **argv) {
 
     if(argc != 2){
         printf("Usage: ./download ftp://[<user>:<password>@]<host>/<url-path>\n");
+        return 1;
     }
 
     get_args(argv[1]);
