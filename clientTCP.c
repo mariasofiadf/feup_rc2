@@ -10,18 +10,18 @@
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include <unistd.h>
-
+#include <fcntl.h>
 #include <string.h>
 
 #define SERVER_PORT 21
 #define SERVER_ADDR "193.137.29.15"
-#define READ_MAX 10
+#define READ_MAX 50
 
 int get_resp(int controlfd, int code, char* resp){
-    int num, count =0;
-    while(read(controlfd, resp, 255) >= 0 && count<READ_MAX ){
+    int num, count = 0;
+    while(read(controlfd, resp, 255) >= 0){
         num = atoi(resp);
-        if(code == num){
+        if(code == num || 1){
             printf("%s\n", resp);
             return 0;
         }
@@ -30,10 +30,11 @@ int get_resp(int controlfd, int code, char* resp){
     return 0;
 }
 
-int rcv(int controlfd, int code){
+int rcv(int sockfd, int code){
     char recBuf[255];
     int num = -1, count =0;
-    while(read(controlfd, recBuf, 255) >= 0 && count<READ_MAX ){
+    while(read(sockfd, recBuf, 255) >= 0){
+        printf("w");
         num = atoi(recBuf);
         if(num == code) {
             printf("%s\n", recBuf);
@@ -64,7 +65,6 @@ int anonymous_login(int controlfd){
 
     rcv(controlfd, 230);
 
-
     return 0;
 }
 
@@ -81,7 +81,8 @@ int get_port(char*string){
 
 int retr(int controlfd, char* filepath){
  
-    char cmd[100] = "retr pub/kodi/timestamp.txt";
+    char cmd[100] = "retr pub/kodi/timestamp.txt\n";
+
     //sprintf(cmd, "retr %s", "pub/kodi/timestamp.txt");
     send_cmd(controlfd, cmd);
     
@@ -92,8 +93,9 @@ int retr(int controlfd, char* filepath){
     //     memset(recBuf,0,strlen(recBuf));
     // }
 
-    rcv(controlfd, 150);
+    //rcv(controlfd, 150);
     //rcv(controlfd, 226);
+    return 0;
 }
 
 
@@ -129,6 +131,8 @@ int connect_socket(int port){
         perror("connect()");
         exit(-1);
     }
+
+    printf("Connected\n");
     return sockfd;
 }
 
@@ -137,19 +141,33 @@ int main(int argc, char **argv) {
     int controlfd = connect_socket(SERVER_PORT);
 
 
-    char recBuf[255];
-
     fsync(controlfd);
 
     anonymous_login(controlfd);
 
     int listen_port = pasv(controlfd);
 
+    printf("port: %d\n", listen_port);
+
     int datafd = connect_socket(listen_port);
 
     retr(controlfd, NULL);
 
+    int fd = open("copy.txt", O_WRONLY | O_CREAT, S_IRWXU);
+
+    int r = 0;
+    char recBuf[255];
+    while((r = read(datafd, recBuf, 255))){
+        write(fd, &recBuf,r);
+        printf("%s", recBuf);
+    }
+
+    close(fd);
+
     printf("Closing\n");
+
+
+    //rcv(datafd,220);
 
     if (close(controlfd)<0) {
         perror("close()");
