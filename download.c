@@ -24,8 +24,8 @@
 #define SERVER_ADDR "193.137.29.15"
 #define READ_MAX 50
 
-char user[255];
-char password[255];
+char user[255] = "anonymous";
+char password[255] = "pass";
 char host[255];
 char url_path[255];
 char ip[255];
@@ -176,15 +176,42 @@ void revstr(char *str1)
     }  
 }  
 
-int get_args(char *url){
-    char *token = strtok(url, "[");
+int get_args(char *url, int anonymous){
+    char *token;
+    if(!anonymous){
+        token = strtok(url, "[");
 
-    token = strtok(NULL, ":");
-    strcpy(user,token);
-    token = strtok(NULL, "]");
-    strcpy(password,token);
+        token = strtok(NULL, ":");
+        strcpy(user,token);
+        token = strtok(NULL, "]");
+        strcpy(password,token);
+        
+    }else{   
+        char *token = strtok(url, "//");
+    }
     token = strtok(NULL, "/");
     strcpy(host,token);
+    token = strtok(NULL, "\0");
+    strcpy(url_path,token);
+
+    char rev[100];
+    strcpy(rev, url_path);
+    revstr(rev);
+    token = strtok(rev, "/");
+    strcpy(filename,token);
+    revstr(filename);
+    printf("filename: %s\n ", filename);
+    get_host();
+    printf("ip: %s\n", ip);
+    return 0;
+}
+
+int get_args2(char *url){
+    char *token = strtok(url, "//");
+
+    token = strtok(NULL, "/");
+    strcpy(host,token);
+    printf("host: %s ", host);
     token = strtok(NULL, "\0");
     strcpy(url_path,token);
 
@@ -207,7 +234,14 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    get_args(argv[1]);
+    int anonymous = strchr(argv[1], '[') == NULL;
+    get_args(argv[1], anonymous);
+
+    printf("user: %s\n", user);
+    printf("password: %s\n", password);
+    printf("host: %s\n", host);
+    printf("ip: %s\n", ip);
+    printf("url_path: %s\n", url_path);
 
     int controlfd = connect_socket(SERVER_PORT);
 
