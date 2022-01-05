@@ -2,6 +2,8 @@
  *       tidy up some includes and parameters
  * */
 
+//https://www.omnisecu.com/tcpip/ftp-active-vs-passive-modes.php
+
 #include <stdio.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -13,28 +15,39 @@
 
 #define SERVER_PORT 21
 #define SERVER_ADDR "193.137.29.15"
+#define READ_MAX 10
 
-int get_resp(int sockfd, int code, char* resp){
-    int num;
-    while(read(sockfd, resp, 255) >= 0){
+int get_resp(int controlfd, int code, char* resp){
+    int num, count =0;
+    while(read(controlfd, resp, 255) >= 0 && count<READ_MAX ){
         num = atoi(resp);
-        if(code == num)
+        if(code == num){
+            printf("%s\n", resp);
             return 0;
+        }
+        count++;
     }
     return 0;
 }
 
-int rcv(int sockfd){
-    char recBuf[1000];
-    while(read(sockfd, recBuf, 255) >= 0){
-        printf("%s", recBuf);
+int rcv(int controlfd, int code){
+    char recBuf[255];
+    int num = -1, count =0;
+    while(read(controlfd, recBuf, 255) >= 0 && count<READ_MAX ){
+        num = atoi(recBuf);
+        if(num == code) {
+            printf("%s\n", recBuf);
+            return 0;
+        }
+        num = 0; memset(recBuf,0,strlen(recBuf));
+        count++;
     }
     return 0;
 }
 
-int send_cmd(int sockfd, char* cmd){
-    int bytes = write(sockfd, cmd, strlen(cmd));
-    //bytes = write(sockfd, buf, strlen(buf));
+int send_cmd(int controlfd, char* cmd){
+    int bytes = write(controlfd, cmd, strlen(cmd));
+    //bytes = write(controlfd, buf, strlen(buf));
     if (bytes <= 0){
         perror("write()");
         exit(-1);
@@ -42,42 +55,59 @@ int send_cmd(int sockfd, char* cmd){
     return 0;
 }
 
-int anonymous_login(int sockfd){
-    send_cmd(sockfd, "user anonymous\n");
+int anonymous_login(int controlfd){
+    send_cmd(controlfd, "user anonymous\n");
 
-    send_cmd(sockfd, "pass password\n");
+    rcv(controlfd, 331);
+
+    send_cmd(controlfd, "pass password\n");
+
+    rcv(controlfd, 230);
+
 
     return 0;
 }
 
 int get_port(char*string){
     
-    int num, sum = 0, n1,n2;
+    int num, n1,n2;
     
     for(int i = 0; i < 4; i++){
         sscanf(string, "%d Entering Passive Mode (%d,%d,%d,%d,%d,%d)",&num,&num,&num,&num,&num,&n1,&n2);
     }
-
     return 256*n1 + n2;
 
 }
 
-int enter_pasv(int sockfd){
+int retr(int controlfd, char* filepath){
+ 
+    char cmd[100] = "retr pub/kodi/timestamp.txt";
+    //sprintf(cmd, "retr %s", "pub/kodi/timestamp.txt");
+    send_cmd(controlfd, cmd);
+    
+    // char recBuf[255];
+    // while(read(controlfd, recBuf, 255) >= 0){
+    //     printf("%s\n", recBuf);
+    //     return 0;
+    //     memset(recBuf,0,strlen(recBuf));
+    // }
 
-    send_cmd(sockfd, "pasv\n");
-
-    char r[255]; get_resp(sockfd, 227,&r);
-
-    printf("RESPONSE: %s", r);
-
-    printf("PORT: %d", get_port(r));
-
-    send_cmd(sockfd, "retr pub/kodi/timestamp.txt\n");
-
-    return 0;
+    rcv(controlfd, 150);
+    //rcv(controlfd, 226);
 }
 
-int main(int argc, char **argv) {
+
+int pasv(int controlfd){
+
+    send_cmd(controlfd, "pasv\n");
+
+    char r[255]; get_resp(controlfd, 227,r);
+    int port = get_port(r);
+
+    return port;
+}
+
+int connect_socket(int port){
 
     int sockfd;
     struct sockaddr_in server_addr;
@@ -85,7 +115,7 @@ int main(int argc, char **argv) {
     bzero((char *) &server_addr, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = inet_addr(SERVER_ADDR);    /*32 bit Internet address network byte ordered*/
-    server_addr.sin_port = htons(SERVER_PORT);        /*server TCP port must be network byte ordered */
+    server_addr.sin_port = htons(port);        /*server TCP port must be network byte ordered */
 
     /*open a TCP socket*/
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -99,14 +129,33 @@ int main(int argc, char **argv) {
         perror("connect()");
         exit(-1);
     }
+    return sockfd;
+}
 
-    anonymous_login(sockfd);
+int main(int argc, char **argv) {
 
-    enter_pasv(sockfd);
+    int controlfd = connect_socket(SERVER_PORT);
 
-    //rcv(sockfd);
 
-    if (close(sockfd)<0) {
+    char recBuf[255];
+
+    fsync(controlfd);
+
+    anonymous_login(controlfd);
+
+    int listen_port = pasv(controlfd);
+
+    int datafd = connect_socket(listen_port);
+
+    retr(controlfd, NULL);
+
+    printf("Closing\n");
+
+    if (close(controlfd)<0) {
+        perror("close()");
+        exit(-1);
+    }
+    if (close(datafd)<0) {
         perror("close()");
         exit(-1);
     }
