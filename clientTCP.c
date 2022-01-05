@@ -164,11 +164,6 @@ int main(int argc, char **argv) {
 
     close(fd);
 
-    printf("Closing\n");
-
-
-    //rcv(datafd,220);
-
     if (close(controlfd)<0) {
         perror("close()");
         exit(-1);
