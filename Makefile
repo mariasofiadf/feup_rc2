@@ -1,15 +1,13 @@
 CC = gcc
 CFLAGS  = -g -Wall
-all: client getip
+all: client
 
 app: download.c
 	$(CC) $(CFLAGS) -o download download.c
 
-client: clientTCP.c
-	$(CC) $(CFLAGS) -o clientTCP clientTCP.c
+client: clientTCP.c getip.c
+	$(CC) $(CFLAGS) -o clientTCP clientTCP.c getip.c
 
-getip: getip.c
-	$(CC) $(CFLAGS) -o getip getip.c
 
 
 clean:

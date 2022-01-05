@@ -12,10 +12,23 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include<arpa/inet.h>
 
 #define SERVER_PORT 21
 #define SERVER_ADDR "193.137.29.15"
 #define READ_MAX 50
+
+char user[255];
+char password[255];
+char host[255];
+char url_path[255];
+char ip[255];
 
 int get_resp(int controlfd, int code, char* resp){
     int num, count = 0;
@@ -34,10 +47,9 @@ int rcv(int sockfd, int code){
     char recBuf[255];
     int num = -1, count =0;
     while(read(sockfd, recBuf, 255) >= 0){
-        printf("w");
         num = atoi(recBuf);
         if(num == code) {
-            printf("%s\n", recBuf);
+            printf("%s", recBuf);
             return 0;
         }
         num = 0; memset(recBuf,0,strlen(recBuf));
@@ -57,11 +69,14 @@ int send_cmd(int controlfd, char* cmd){
 }
 
 int anonymous_login(int controlfd){
-    send_cmd(controlfd, "user anonymous\n");
+    char cmd[254];
+    sprintf(cmd,"user %s\n", user);
+    send_cmd(controlfd,cmd);
 
     rcv(controlfd, 331);
 
-    send_cmd(controlfd, "pass password\n");
+    sprintf(cmd,"pass %s\n", password);
+    send_cmd(controlfd,cmd);
 
     rcv(controlfd, 230);
 
@@ -81,20 +96,15 @@ int get_port(char*string){
 
 int retr(int controlfd, char* filepath){
  
-    char cmd[100] = "retr pub/kodi/timestamp.txt\n";
+    char cmd[100];
+    sprintf(cmd,"retr %s\n", url_path);
 
     //sprintf(cmd, "retr %s", "pub/kodi/timestamp.txt");
     send_cmd(controlfd, cmd);
     
-    // char recBuf[255];
-    // while(read(controlfd, recBuf, 255) >= 0){
-    //     printf("%s\n", recBuf);
-    //     return 0;
-    //     memset(recBuf,0,strlen(recBuf));
-    // }
 
-    //rcv(controlfd, 150);
-    //rcv(controlfd, 226);
+    rcv(controlfd, 150);
+    rcv(controlfd, 226);
     return 0;
 }
 
@@ -136,10 +146,46 @@ int connect_socket(int port){
     return sockfd;
 }
 
+int get_host(){
+
+    struct hostent * h;
+
+    if ((h = gethostbyname(host)) == NULL) {
+        herror("gethostbyname()");
+        exit(-1);
+    }
+
+    sprintf(ip, "%s", inet_ntoa(*((struct in_addr *) h->h_addr)));
+    return 0;
+}
+
+int get_args(char *url){
+    char trash[100];
+    char *token = strtok(url, "[");
+
+    token = strtok(NULL, ":");
+    strcpy(user,token);
+    token = strtok(NULL, "]");
+    strcpy(password,token);
+    token = strtok(NULL, "/");
+    strcpy(host,token);
+    token = strtok(NULL, "\0");
+    strcpy(url_path,token);
+
+    get_host();
+    printf("ip: %s\n", ip);
+    return 0;
+}
+
 int main(int argc, char **argv) {
 
-    int controlfd = connect_socket(SERVER_PORT);
+    if(argc != 2){
+        printf("Usage: ./download ftp://[<user>:<password>@]<host>/<url-path>\n");
+    }
 
+    get_args(argv[1]);
+
+    int controlfd = connect_socket(SERVER_PORT);
 
     fsync(controlfd);
 
