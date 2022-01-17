@@ -12,17 +12,9 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <netdb.h>
-#include <netinet/in.h>
-#include <stdio.h>  
-#include <string.h>  
-#include<arpa/inet.h>
 
 #define SERVER_PORT 21
-#define SERVER_ADDR "193.137.29.15"
-#define READ_MAX 50
 
 char user[255] = "anonymous";
 char password[255] = "pass";
@@ -69,7 +61,7 @@ int send_cmd(int controlfd, char* cmd){
     return 0;
 }
 
-int anonymous_login(int controlfd){
+int login(int controlfd){
     char cmd[300];
     sprintf(cmd,"user %s\n", user);
     send_cmd(controlfd,cmd);
@@ -127,7 +119,7 @@ int connect_socket(int port){
     /*server address handling*/
     bzero((char *) &server_addr, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = inet_addr(SERVER_ADDR);    /*32 bit Internet address network byte ordered*/
+    server_addr.sin_addr.s_addr = inet_addr(ip);    /*32 bit Internet address network byte ordered*/
     server_addr.sin_port = htons(port);        /*server TCP port must be network byte ordered */
 
     /*open a TCP socket*/
@@ -177,17 +169,14 @@ void revstr(char *str1)
 }  
 
 int get_args(char *url, int anonymous){
-    char *token;
+    char *token = strtok(url, "//");
+    printf("token: %s\n", token);
     if(!anonymous){
-        token = strtok(url, "[");
-
-        token = strtok(NULL, ":");
-        strcpy(user,token);
-        token = strtok(NULL, "]");
+        token = strtok(NULL, ":"); //Extracts user from url
+        strcpy(user,token+1);
+        token = strtok(NULL, "@"); //Extracts password from url
         strcpy(password,token);
         
-    }else{   
-        char *token = strtok(url, "//");
     }
     token = strtok(NULL, "/");
     strcpy(host,token);
@@ -200,32 +189,10 @@ int get_args(char *url, int anonymous){
     token = strtok(rev, "/");
     strcpy(filename,token);
     revstr(filename);
-    printf("filename: %s\n ", filename);
     get_host();
-    printf("ip: %s\n", ip);
     return 0;
 }
 
-int get_args2(char *url){
-    char *token = strtok(url, "//");
-
-    token = strtok(NULL, "/");
-    strcpy(host,token);
-    printf("host: %s ", host);
-    token = strtok(NULL, "\0");
-    strcpy(url_path,token);
-
-    char rev[100];
-    strcpy(rev, url_path);
-    revstr(rev);
-    token = strtok(rev, "/");
-    strcpy(filename,token);
-    revstr(filename);
-    printf("filename: %s\n ", filename);
-    get_host();
-    printf("ip: %s\n", ip);
-    return 0;
-}
 
 int main(int argc, char **argv) {
 
@@ -234,7 +201,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    int anonymous = strchr(argv[1], '[') == NULL;
+    int anonymous = strchr(argv[1], '@') == NULL;
     get_args(argv[1], anonymous);
 
     printf("user: %s\n", user);
@@ -242,12 +209,13 @@ int main(int argc, char **argv) {
     printf("host: %s\n", host);
     printf("ip: %s\n", ip);
     printf("url_path: %s\n", url_path);
+    printf("filename: %s\n ", filename);
 
     int controlfd = connect_socket(SERVER_PORT);
 
     fsync(controlfd);
 
-    anonymous_login(controlfd);
+    login(controlfd);
 
     int listen_port = pasv(controlfd);
 
@@ -257,7 +225,7 @@ int main(int argc, char **argv) {
 
     retr(controlfd, NULL);
 
-    int fd = open("copy.txt", O_WRONLY | O_CREAT, S_IRWXU);
+    int fd = open(filename, O_WRONLY | O_CREAT, 0644);
 
     int r = 0;
     char recBuf[255];
