@@ -19,10 +19,13 @@
 char user[255] = "anonymous";
 char password[255] = "pass";
 char host[255];
-char url_path[255];
+char filepath[255];
 char ip[255];
 char filename[255];
 
+
+//Reads from socket and saves the line with desired code into param 'resp'
+//Used to get port for data socket
 int get_resp(int controlfd, int code, char* resp){
     int num, count = 0;
     while(read(controlfd, resp, 255) >= 0){
@@ -36,6 +39,7 @@ int get_resp(int controlfd, int code, char* resp){
     return 0;
 }
 
+//Reads from socket and prints to screen
 int rcv(int sockfd, int code){
     char recBuf[255];
     int num = -1, count =0;
@@ -51,9 +55,10 @@ int rcv(int sockfd, int code){
     return 0;
 }
 
-int send_cmd(int controlfd, char* cmd){
-    int bytes = write(controlfd, cmd, strlen(cmd));
-    //bytes = write(controlfd, buf, strlen(buf));
+//Sends command to socket
+int send_cmd(int sockfd, char* cmd){
+    int bytes = write(sockfd, cmd, strlen(cmd));
+
     if (bytes <= 0){
         perror("write()");
         exit(-1);
@@ -63,55 +68,60 @@ int send_cmd(int controlfd, char* cmd){
 
 int login(int controlfd){
     char cmd[300];
-    sprintf(cmd,"user %s\n", user);
-    send_cmd(controlfd,cmd);
+    sprintf(cmd,"user %s\n", user); // Construct user command to be sent. Eg: 'user anonymous'
+    send_cmd(controlfd,cmd); // Send command
 
-    rcv(controlfd, 331);
+    rcv(controlfd, 331); //Receive until code 331 -> 'Please specify the password'
 
-    sprintf(cmd,"pass %s\n", password);
-    send_cmd(controlfd,cmd);
+    sprintf(cmd,"pass %s\n", password); // Construct pass command to be sent. Eg: 'pass word'
+    send_cmd(controlfd,cmd); // Send command
 
-    rcv(controlfd, 230);
+    rcv(controlfd, 230); //Receive until code 230-> 'Login sucessful'
 
     return 0;
 }
 
+//Calculate port for data socket
 int get_port(char*string){
     
     int num, n1,n2;
-    
-    for(int i = 0; i < 4; i++){
-        sscanf(string, "%d Entering Passive Mode (%d,%d,%d,%d,%d,%d)",&num,&num,&num,&num,&num,&n1,&n2);
-    }
-    return 256*n1 + n2;
 
+    //227 Entering Passive Mode (193,137,29,15,196,249).
+    sscanf(string, "%d Entering Passive Mode (%d,%d,%d,%d,%d,%d)",&num,&num,&num,&num,&num,&n1,&n2);
+
+    return 256*n1 + n2;
 }
 
-int retr(int controlfd, char* filepath){
+//Send retr commnad
+int retr(int controlfd){
  
     char cmd[300];
-    sprintf(cmd,"retr %s\n", url_path);
+    sprintf(cmd,"retr %s\n", filepath); //Construct retr command to be sent. Eg: 'retr pub/kodi/timestamp.txt'
 
-    //sprintf(cmd, "retr %s", "pub/kodi/timestamp.txt");
     send_cmd(controlfd, cmd);
-    
 
-    rcv(controlfd, 150);
-    rcv(controlfd, 226);
+    rcv(controlfd, 150); //Receive until code 150 -> 'Opening BINARY mode data connection for...'
+    rcv(controlfd, 226); //Receive until code 226 -> 'Transfer complete.'
     return 0;
 }
 
 
+//Send pasv command
 int pasv(int controlfd){
 
     send_cmd(controlfd, "pasv\n");
 
-    char r[255]; get_resp(controlfd, 227,r);
+    char r[255]; 
+    get_resp(controlfd, 227,r); //Receive until 227 and save receive line in r.
+
+    //Eg. r = 227 Entering Passive Mode (193,137,29,15,201,27).
     int port = get_port(r);
 
-    return port;
+    return port;//Returns port for data socket
 }
 
+//Open socket connection on port
+//Uses global variable 'ip'
 int connect_socket(int port){
 
     int sockfd;
@@ -139,6 +149,8 @@ int connect_socket(int port){
     return sockfd;
 }
 
+//"Translates" url to ipv4
+//Utilizes global variables 'ip' and 'host'
 int get_host(){
 
     struct hostent * h;
@@ -152,6 +164,8 @@ int get_host(){
     return 0;
 }
 
+//Reverses a string
+//Used in get_args
 void revstr(char *str1)  
 {  
     // declare variable  
@@ -168,9 +182,11 @@ void revstr(char *str1)
     }  
 }  
 
-int get_args(char *url, int anonymous){
+//Extract arguments from url
+int get_args(char *url){
+    int anonymous = strchr(url, '@') == NULL; // If there is no '@' in the url, then anonymous mode is used
     char *token = strtok(url, "//");
-    printf("token: %s\n", token);
+    
     if(!anonymous){
         token = strtok(NULL, ":"); //Extracts user from url
         strcpy(user,token+1);
@@ -178,14 +194,15 @@ int get_args(char *url, int anonymous){
         strcpy(password,token);
         
     }
-    token = strtok(NULL, "/");
+    
+    token = strtok(NULL, "/"); //Extracts host from url
     strcpy(host,token);
-    token = strtok(NULL, "\0");
-    strcpy(url_path,token);
+    token = strtok(NULL, "\0"); //Extracts filepath from url
+    strcpy(filepath,token);
 
     char rev[100];
-    strcpy(rev, url_path);
-    revstr(rev);
+    strcpy(rev, filepath);
+    revstr(rev); // Reverses filepath in order to get filename
     token = strtok(rev, "/");
     strcpy(filename,token);
     revstr(filename);
@@ -201,46 +218,45 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    int anonymous = strchr(argv[1], '@') == NULL;
-    get_args(argv[1], anonymous);
+    get_args(argv[1]);
 
-    printf("user: %s\n", user);
+    printf("\nuser: %s\n", user);
     printf("password: %s\n", password);
     printf("host: %s\n", host);
     printf("ip: %s\n", ip);
-    printf("url_path: %s\n", url_path);
-    printf("filename: %s\n ", filename);
+    printf("filepath: %s\n", filepath);
+    printf("filename: %s\n\n ", filename);
 
-    int controlfd = connect_socket(SERVER_PORT);
+    int controlfd = connect_socket(SERVER_PORT); // open control socket
 
-    fsync(controlfd);
+    fsync(controlfd); //Flushes content in controlfd
 
-    login(controlfd);
+    login(controlfd); //Sends login commands (anonymous by default)
 
-    int listen_port = pasv(controlfd);
+    int listen_port = pasv(controlfd); //Sends pasv command
 
-    printf("port: %d\n", listen_port);
+    //printf("port: %d\n", listen_port); //For debugging only
 
-    int datafd = connect_socket(listen_port);
+    int datafd = connect_socket(listen_port); // open data socket
 
-    retr(controlfd, NULL);
+    retr(controlfd); // Send retr commnad for desired file
 
-    int fd = open(filename, O_WRONLY | O_CREAT, 0644);
+    int fd = open(filename, O_WRONLY | O_CREAT, 0644); // Open/Create file to be written
 
     int r = 0;
     char recBuf[255];
-    while((r = read(datafd, recBuf, 255))){
+    while((r = read(datafd, recBuf, 255))){ // Write to file while necessary
         write(fd, &recBuf,r);
         printf("%s", recBuf);
     }
 
     close(fd);
 
-    if (close(controlfd)<0) {
+    if (close(controlfd)<0) { // Close control socket
         perror("close()");
         exit(-1);
     }
-    if (close(datafd)<0) {
+    if (close(datafd)<0) { // Close data socket
         perror("close()");
         exit(-1);
     }
