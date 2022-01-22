@@ -245,7 +245,7 @@ int main(int argc, char **argv) {
 
     int r = 0;
     char recBuf[255];
-    while((r = read(datafd, recBuf, 255))){ // Write to file while necessary
+    while((r = read(datafd, &recBuf, 255))){ // Write to file while necessary
         write(fd, &recBuf,r);
         printf("%s", recBuf);
     }
